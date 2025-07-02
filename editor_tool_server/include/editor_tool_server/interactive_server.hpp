@@ -18,7 +18,11 @@
 
 #include "editor_tool_srvs/srv/load_csv.hpp"
 #include "editor_tool_srvs/srv/select_range.hpp"
+#include "editor_tool_srvs/srv/save_csv.hpp"
 #include "std_srvs/srv/trigger.hpp"
+
+#include "autoware_auto_planning_msgs/msg/trajectory.hpp"
+#include "autoware_auto_planning_msgs/msg/trajectory_point.hpp"
 
 namespace editor_tool_server
 {
@@ -42,6 +46,12 @@ namespace editor_tool_server
     void LoadCsv(
       const std::shared_ptr<editor_tool_srvs::srv::LoadCsv::Request>  request,
       std::shared_ptr<editor_tool_srvs::srv::LoadCsv::Response>       response);
+    
+    void LoadCsvFile(const std::string & file_name);
+
+    void SaveCsvSrv(
+      const std::shared_ptr<editor_tool_srvs::srv::SaveCsv::Request> request,
+      std::shared_ptr<editor_tool_srvs::srv::SaveCsv::Response>      response);
 
     /// 選択モードを開始し、２点を選択した後、その間にあるマーカーを青くして速度を反映する
     void StartSelection(
@@ -63,6 +73,12 @@ namespace editor_tool_server
     void redo(
       const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
       std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
+    void publishTrajectorySrv(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
+    void AutoColorizeTraj(visualization_msgs::msg::Marker & marker, double velocity);
+    void publishTrajectory();
     
     void redrawMarkers();
     void createMoveHelperMarker();
@@ -89,6 +105,8 @@ namespace editor_tool_server
     /// trajectory_markers_（基礎マーカー群）を元に改めて MarkerArray を生成して publish
     void publishMarkers();
 
+    void refreshTrajectoryColor();
+
     // --- CSV ↔ MarkerArray 変換ヘルパー ---
 
     /// 1行の CSV テキストを Marker に変換
@@ -99,8 +117,7 @@ namespace editor_tool_server
 
     /// MarkerArray のデータを CSV ファイルに出力
     bool saveCsv(
-      const std::string & file_name,
-      const visualization_msgs::msg::MarkerArray & marker_array);
+      const std::string & file_name);
 
     std::vector<int> getRangeIndices(int idx1, int idx2);
 
@@ -112,13 +129,28 @@ namespace editor_tool_server
     /// Service
     rclcpp::Service<editor_tool_srvs::srv::LoadCsv>::SharedPtr load_csv_service_;
     rclcpp::Service<editor_tool_srvs::srv::SelectRange>::SharedPtr select_range_service_;
+    rclcpp::Service<editor_tool_srvs::srv::SaveCsv>::SharedPtr save_csv_service_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_parallel_move_service_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr confirm_parallel_move_service_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr undo_service_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr redo_service_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr publish_trajectory_service_;
+
+    /// Node param
+    std::string csv_file_path_;
+    bool publish_on_initialize_;
+    float wait_seconds_;
+    double min_speed_;
+    double max_speed_;
+    double mid_speed_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
+
+    rcl_interfaces::msg::SetParametersResult onParameterChange(const std::vector<rclcpp::Parameter> & parameters);
+
 
     /// MarkerArray をまとめて publish するパブリッシャ
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
+    rclcpp::Publisher<autoware_auto_planning_msgs::msg::Trajectory>::SharedPtr trajectory_pub_;
 
     /// 基礎となる軌跡マーカーを保持。CSV から読み込んだ順番どおりに格納
     std::vector<visualization_msgs::msg::Marker> trajectory_markers_;
